@@ -20,7 +20,8 @@ function RegularizedLeastSquares.kaczmarz_update!(prod::ProdOp{Tc, WeightingOp{T
   RegularizedLeastSquares.kaczmarz_update!(prod.B, x, k, weight*beta) # only for real weights
 end
 
-function RegularizedLeastSquares.dot_with_matrix_row(state_τl::vecT, A::matT, x::matT, k::Int64) where {T, vecT <: AbstractGPUArray{T}, matT <: AbstractGPUArray{T}}
-  state_τl .= vec(sum(x .* view(A, k, :), dims = 1))
+function RegularizedLeastSquares.dot_with_matrix_row(state_τl::vecT, A::matT, x::matT, k::Int64) where {T, vecT <: AbstractVector{T}, matT <: AbstractGPUArray{T}}
+  # state_τl .= vec(sum(x .* view(A, k, :), dims = 1))
   # state_τl .= vec(sum(collect(Broadcast.instantiate(Broadcast.broadcasted(*, view(A, k, :), x))), dims = 1))
+  state_τl .= sum(Broadcast.instantiate(Broadcast.broadcasted(*, view(A, k, :), x)), dims = 1, init = 0.0)'
 end

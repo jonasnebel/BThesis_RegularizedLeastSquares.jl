@@ -1,5 +1,7 @@
 export kaczmarz
 export Kaczmarz
+export KaczmarzMatrixState
+export KaczmarzState
 
 mutable struct Kaczmarz{matT,R,U,RN} <: AbstractRowActionSolver
   A::matT
@@ -130,9 +132,10 @@ end
 function init!(solver::Kaczmarz, state::KaczmarzState{T, MatT}, b::otherT; kwargs...) where {T, MatT, otherT <: AbstractMatrix}
   x = similar(b, (size(solver.A, 2), size(b, 2))).=0
   vl = similar(b, size(b)...).*0
-  εw = zeros(size(b, 2)...)
-  τl = zeros(size(b, 2)...)
-  αl = zeros(size(b, 2)...)
+  εw = similar(b, size(b, 2)...)
+  τl = similar(b, size(b, 2)...)
+  αl = similar(b, size(b, 2)...)
+  display(b)
   state = KaczmarzMatrixState(b, x, vl, εw, τl, αl, state.iteration)
   solver.state = state
 end

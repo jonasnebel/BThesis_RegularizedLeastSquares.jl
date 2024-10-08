@@ -13,8 +13,8 @@ gpu = CuArray;
 
 
 function single_test()
-    A = rand(16, 16)
-    x = rand(16, columns)
+    A = gpu(rand(16, 16))
+    x = gpu(rand(16, columns))
     b = A*x;
     solver = createLinearSolver(Kaczmarz, A; iterations=iterations);
     #cb = CompareSolutionCallback(deepcopy(solve!(solver, b)));

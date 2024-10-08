@@ -1,5 +1,4 @@
 export rownorm², nrmsd
-
 """
 This function computes the 2-norm² of a rows of S for dense matrices.
 """
@@ -12,11 +11,7 @@ end
 
 function rownorm²(A::AbstractMatrix,row::Int64)
   T = real(eltype(A))
-  res = zero(T)
-  @simd for n=1:size(A,2)
-    res += abs2(A[row,n])
-  end
-  return res
+  return sum(abs2, view(A, row, :))
 end
 
 rownorm²(A::AbstractLinearOperator,row::Int64) = rownorm²(Matrix(A[row, :]), 1)
@@ -74,6 +69,15 @@ This funtion calculates ∑ᵢ Aᵢₖxᵢ for dense matrices.
 function dot_with_matrix_row(A::DenseMatrix{T}, x::Vector{T}, k::Int64) where {T<:Real}
   BLAS.dot(length(x), pointer(A,(LinearIndices(size(A)))[k,1]), size(A,1), pointer(x,1), 1)
 end
+
+"""
+This funtion calculates ?? for dense matrices. 
+"""
+function dot_with_matrix_row(state_τl::AbstractArray{T}, A::DenseMatrix{T}, x::Matrix{T}, k::Int64) where {T<:Real}
+  #state_τl .= vec(sum(x .* view(A, k, :), dims = 1))
+  state_τl .= vec(sum(collect(Broadcast.instantiate(Broadcast.broadcasted(*, view(A, k, :), x))), dims = 1))
+end
+
 
 """
 This funtion calculates ∑ᵢ Aᵢₖxᵢ for dense matrices.

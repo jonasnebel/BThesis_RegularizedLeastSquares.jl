@@ -1,8 +1,15 @@
 export CompareSolutionCallback
+export CompareSolutionCallbackMatrix
+
 mutable struct CompareSolutionCallback{T, F}
   ref::Vector{T}
   cmp::F
   results::Vector{Float64}
+end
+mutable struct CompareSolutionCallbackMatrix{T, F}
+  ref::Matrix{T}
+  cmp::F
+  results::Vector{}
 end
 
 """
@@ -11,8 +18,14 @@ end
 Callback that compares the solvers current `solution` with the given reference via `cmp(ref, solution)` per iteration. Results are stored in the `results` field.
 """
 CompareSolutionCallback(ref::Vector{T}, cmp = nrmsd) where T = CompareSolutionCallback(ref, cmp, Vector{Float64}())
+CompareSolutionCallbackMatrix(ref::Matrix{T}, cmp = nrmsd) where T = CompareSolutionCallbackMatrix(ref, cmp, Vector{Float64}())
 
 function (cb::CompareSolutionCallback)(solver::AbstractLinearSolver, _)
+  x = solversolution(solver)
+  push!(cb.results, cb.cmp(cb.ref, x))
+end
+
+function (cb::CompareSolutionCallbackMatrix)(solver::AbstractLinearSolver, _)
   x = solversolution(solver)
   push!(cb.results, cb.cmp(cb.ref, x))
 end

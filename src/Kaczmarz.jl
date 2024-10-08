@@ -28,6 +28,16 @@ mutable struct KaczmarzState{T, vecT <: AbstractArray{T}} <: AbstractSolverState
   iteration::Int64
 end
 
+mutable struct KaczmarzMatrixState{T, MatT <: AbstractMatrix{T}, vecT <: AbstractVector{T}} <: AbstractSolverState{Kaczmarz}
+  u::MatT
+  x::MatT
+  vl::MatT
+  εw::vecT
+  τl::vecT
+  αl::vecT
+  iteration::Int64
+end
+
 """
     Kaczmarz(A; reg = L2Regularization(0), normalizeReg = NoNormalization(), randomized=false, subMatrixFraction=0.15, shuffleRows=false, seed=1234, iterations=10)
 
@@ -58,7 +68,6 @@ function Kaczmarz(A
                 )
 
   T = real(eltype(A))
-
   # Prepare regularization terms
   reg = isa(reg, AbstractVector) ? reg : [reg]
   reg = normalize(Kaczmarz, normalizeReg, reg, A, nothing)
@@ -104,7 +113,6 @@ function Kaczmarz(A
   αl = zero(eltype(A))
 
   state = KaczmarzState(u, x, vl, εw, τl, αl, 0)
-
   return Kaczmarz(A, L2, other, denom, rowindex, rowIndexCycle,
                   randomized, subMatrixSize, probabilities, shuffleRows,
                   Int64(seed), normalizeReg, iterations, state)
@@ -114,11 +122,55 @@ function init!(solver::Kaczmarz, state::KaczmarzState{T, vecT}, b::otherT; kwarg
   u = similar(b, size(state.u)...)
   x = similar(b, size(state.x)...)
   vl = similar(b, size(state.vl)...)
-
   state = KaczmarzState(u, x, vl, state.εw, state.τl, state.αl, state.iteration)
   solver.state = state
   init!(solver, state, b; kwargs...)
 end
+
+function init!(solver::Kaczmarz, state::KaczmarzState{T, MatT}, b::otherT; kwargs...) where {T, MatT, otherT <: AbstractMatrix}
+  x = similar(b, (size(solver.A, 2), size(b, 2))).=0
+  vl = similar(b, size(b)...).*0
+  εw = zeros(size(b, 2)...)
+  τl = zeros(size(b, 2)...)
+  αl = zeros(size(b, 2)...)
+  state = KaczmarzMatrixState(b, x, vl, εw, τl, αl, state.iteration)
+  solver.state = state
+end
+
+function init!(solver::Kaczmarz, state::KaczmarzMatrixState{T, MatT}, b::MatT; x0 = 0) where {T, MatT <: AbstractMatrix}
+  display("In long init for Matrix")
+  λ_prev = λ(solver.L2)
+  solver.L2  = normalize(solver, solver.normalizeReg, solver.L2,  solver.A, b)
+  solver.reg = normalize(solver, solver.normalizeReg, solver.reg, solver.A, b)
+  λ_ = λ(solver.L2)
+  # display(state.iteration)
+
+  # λ changed => recompute denoms
+  if λ_ != λ_prev
+    # A must be unchanged, since we do not store the original SM
+    _, solver.denom, solver.rowindex = initkaczmarz(solver.A, λ_)
+    solver.rowIndexCycle = collect(1:length(rowindex))
+    if solver.randomized
+      solver.probabilities = T.(rowProbabilities(solver.A, rowindex))
+    end
+  end
+
+  # start vector
+  # X wäre ne Matrix mit cols = b_cols also hier unpraktisch
+  # -- Das ggf in 2 funktionenm einmal so für Vektor einmal neu damit die X matrix schön alles auf 0 gesetzt wird
+  # nur if sizes different dann neues Array und dann mit dem array den broad cast von unten genauso nochmal machen
+  state.x .= x0
+  state.vl .= 0
+  state.u .= b
+
+  if λ_ isa AbstractMatrix
+    state.ɛw = 0
+  else
+    state.ɛw .= sqrt(λ_)
+  end
+  state.iteration = 0
+end
+
 
 """
   init!(solver::Kaczmarz, b; x0 = 0)
@@ -126,11 +178,12 @@ end
 (re-) initializes the Kacmarz iterator
 """
 function init!(solver::Kaczmarz, state::KaczmarzState{T, vecT}, b::vecT; x0 = 0) where {T, vecT <: AbstractVector}
+  display("In long init for vector")
   λ_prev = λ(solver.L2)
   solver.L2  = normalize(solver, solver.normalizeReg, solver.L2,  solver.A, b)
   solver.reg = normalize(solver, solver.normalizeReg, solver.reg, solver.A, b)
-
   λ_ = λ(solver.L2)
+  # display(state.iteration)
 
   # λ changed => recompute denoms
   if λ_ != λ_prev
@@ -150,10 +203,16 @@ function init!(solver::Kaczmarz, state::KaczmarzState{T, vecT}, b::vecT; x0 = 0)
   end
 
   # start vector
+  # X wäre ne Matrix mit cols = b_cols also hier unpraktisch
+  # -- Das ggf in 2 funktionenm einmal so für Vektor einmal neu damit die X matrix schön alles auf 0 gesetzt wird
+  # nur if sizes different dann neues Array und dann mit dem array den broad cast von unten genauso nochmal machen
   state.x .= x0
   state.vl .= 0
 
   state.u .= b
+  #display(state.u)
+
+  #--
   if λ_ isa AbstractVector
     state.ɛw = 0
   else
@@ -169,7 +228,7 @@ end
 solversolution(solver::Kaczmarz) = solversolution(solver.state)
 solverconvergence(state::KaczmarzState) = (; :residual => norm(state.vl))
 
-function iterate(solver::Kaczmarz, state::KaczmarzState)
+function iterate(solver::Kaczmarz, state::Union{KaczmarzState,KaczmarzMatrixState})
   if done(solver,state) return nothing end
 
   if solver.randomized
@@ -177,7 +236,6 @@ function iterate(solver::Kaczmarz, state::KaczmarzState)
   else
     usedIndices = solver.rowIndexCycle
   end
-
   for i in usedIndices
     row = solver.rowindex[i]
     iterate_row_index(solver, state, solver.A, row, i)
@@ -191,15 +249,36 @@ function iterate(solver::Kaczmarz, state::KaczmarzState)
   return state.x, state
 end
 
-iterate_row_index(solver::Kaczmarz, state::KaczmarzState, A::AbstractLinearSolver, row, index) = iterate_row_index(solver, Matrix(A[row, :]), row, index) 
+iterate_row_index(solver::Kaczmarz, state::KaczmarzState, A::AbstractLinearOperator, row, index) = iterate_row_index(solver, Matrix(A[row, :]), row, index) 
 function iterate_row_index(solver::Kaczmarz, state::KaczmarzState, A, row, index)
   state.τl = dot_with_matrix_row(A,state.x,row)
   state.αl = solver.denom[index]*(state.u[row]-state.τl-state.ɛw*state.vl[row])
   kaczmarz_update!(A,state.x,row,state.αl)
-  state.vl[row] += state.αl*state.ɛw
+  state.vl[row] += state.αl*state.ɛw # TODO wofür ist das da? Das ist immer nur 0??
 end
 
+# TODO 
+function iterate_row_index(solver::Kaczmarz, state::KaczmarzMatrixState{T, MatT}, A, row, index) where {T, MatT<:AbstractMatrix}
+  #display(state.τl)
+  #display(A)
+  dot_with_matrix_row(state.τl,A, state.x, row)
+
+  # state.τl = vec(mapslices(X -> dot_with_matrix_row(A, X, row), state.x, dims=1))
+  # state.τl = [dot_with_matrix_row(A, state.x[:, i], row) for i in 1:size(state.x, 2)]
+  # display(state.τl)
+
+  state.αl .= solver.denom[index]*(state.u[row, :] .- state.τl .- state.ɛw .* state.vl[row, :]) 
+  kaczmarz_update!(A,state.x,row,state.αl)
+  state.vl[row, :] .+= state.αl .* state.ɛw
+
+  #for i in 1:size(state.x, 2) 
+  #  state.vl[row, i] += state.αl[i]*state.ɛw[i] # TODO was sollte hier passieren?
+  #end
+end 
+
+
 @inline done(solver::Kaczmarz,state::KaczmarzState) = state.iteration>=solver.iterations
+@inline done(solver::Kaczmarz,state::KaczmarzMatrixState) = state.iteration>=solver.iterations
 
 
 """
@@ -259,6 +338,18 @@ function kaczmarz_update!(A::DenseMatrix{T}, x::Vector, k::Integer, beta) where 
     @inbounds x[n] += beta*conj(A[k,n])
   end
 end
+
+"""
+    kaczmarz_update!(A::DenseMatrix{T}, x::Matrix, k::Integer, beta) where T
+  beta array
+This function updates x during the kaczmarz algorithm for dense matrices in the multiframe variant.
+"""
+function kaczmarz_update!(A::DenseMatrix{T}, x::Matrix, k::Integer, beta) where T
+  @simd for n=1:size(A,2)
+    @inbounds x[n, :] .+= beta .* conj(A[k,n])
+  end
+end
+
 
 """
     kaczmarz_update!(B::Transpose{T,S}, x::Vector,

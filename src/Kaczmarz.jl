@@ -132,10 +132,9 @@ end
 function init!(solver::Kaczmarz, state::KaczmarzState{T, MatT}, b::otherT; kwargs...) where {T, MatT, otherT <: AbstractMatrix}
   x = similar(b, (size(solver.A, 2), size(b, 2))).=0
   vl = similar(b, size(b)...).*0
-  εw = similar(b, size(b, 2)...)
-  τl = similar(b, size(b, 2)...)
-  αl = similar(b, size(b, 2)...)
-  display(b)
+  εw = similar(b, size(b, 2)...).*0
+  τl = similar(b, size(b, 2)...).*0
+  αl = similar(b, size(b, 2)...).*0
   state = KaczmarzMatrixState(b, x, vl, εw, τl, αl, state.iteration)
   solver.state = state
 end
@@ -262,14 +261,9 @@ end
 
 # TODO 
 function iterate_row_index(solver::Kaczmarz, state::KaczmarzMatrixState{T, MatT}, A, row, index) where {T, MatT<:AbstractMatrix}
-  #display(state.τl)
-  #display(A)
   dot_with_matrix_row(state.τl,A, state.x, row)
-
   # state.τl = vec(mapslices(X -> dot_with_matrix_row(A, X, row), state.x, dims=1))
   # state.τl = [dot_with_matrix_row(A, state.x[:, i], row) for i in 1:size(state.x, 2)]
-  # display(state.τl)
-
   state.αl .= solver.denom[index]*(state.u[row, :] .- state.τl .- state.ɛw .* state.vl[row, :]) 
   kaczmarz_update!(A,state.x,row,state.αl)
   state.vl[row, :] .+= state.αl .* state.ɛw

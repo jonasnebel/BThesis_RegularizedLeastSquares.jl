@@ -7,20 +7,21 @@ using GPUArrays
 
 print("\n-----------------------------------\n")
 
-iterations = 500
-columns = 2
+iterations = 4000
+columns = 256
 gpu = CuArray;
 
 
 function single_test()
-    A = gpu(rand(16, 16))
-    x = gpu(rand(16, columns))
+    A = gpu(rand(12, 12))
+    x = gpu(rand(12, columns))
     b = A*x;
     solver = createLinearSolver(Kaczmarz, A; iterations=iterations);
     #cb = CompareSolutionCallback(deepcopy(solve!(solver, b)));
     #x_approx = solve!(solver, b, callbacks = cb)
     x_approx = solve!(solver, b)
     # display(cb.results)
+    #display(x)
     #display(x_approx)
     isapprox(x, x_approx; atol=0.1)
 end
@@ -53,7 +54,7 @@ function run_function_n_times(func, n)
     print("\n")
 end
 
-@time run_function_n_times(single_test, 1)
+@time run_function_n_times(single_test, 10)
 ax = 2000
 ay = 2000
 xcols = 1000

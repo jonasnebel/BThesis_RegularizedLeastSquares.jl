@@ -27,7 +27,7 @@ function RegularizedLeastSquares.kaczmarz_update!(prod::ProdOp{Tc, WeightingOp{T
 end
 
 function RegularizedLeastSquares.kaczmarz_update!(A::matT, x::matT, row, beta) where {T, matT <: AbstractGPUArray{T}}
-  x .= (x' .+ (beta .* conj.(view(A, row, :))'))'
+  x .= (x .+ (beta .* conj.(view(A, row, :))))
 end
 
 function RegularizedLeastSquares.dot_with_matrix_row(state_τl::vecT, A::matT, x::matT, k::Int64) where {T, vecT <: AbstractVector{T}, matT <: AbstractGPUArray{T}}

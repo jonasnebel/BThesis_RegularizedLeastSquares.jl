@@ -7,8 +7,8 @@ using GPUArrays
 
 print("\n-----------------------------------\n")
 
-iterations = 4000
-columns = 256
+iterations = 1000
+columns = 16
 gpu = CuArray;
 
 
@@ -54,7 +54,7 @@ function run_function_n_times(func, n)
     print("\n")
 end
 
-@time run_function_n_times(single_test, 10)
+@time run_function_n_times(single_test, 1)
 ax = 2000
 ay = 2000
 xcols = 1000
